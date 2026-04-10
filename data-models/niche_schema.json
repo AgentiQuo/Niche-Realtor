@@ -1,0 +1,15 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Niche",
+  "type": "object",
+  "properties": {
+    "niche_id": { "type": "string" },
+    "name": { "type": "string" },
+    "description": { "type": "string" },
+    "tags": { "type": "array", "items": { "$ref": "tag_schema.json#" } },
+    "neighborhoods": { "type": "array", "items": { "$ref": "neighborhood_schema.json#" } },
+    "embedding": { "type": "array", "items": { "type": "number" } },
+    "sources": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["niche_id", "name", "description"]
+}

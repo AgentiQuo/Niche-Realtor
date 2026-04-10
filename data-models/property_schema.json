@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Property",
+  "type": "object",
+  "properties": {
+    "property_id": { "type": "string" },
+    "images": { "type": "array", "items": { "type": "string" } },
+    "tags": { "type": "array", "items": { "$ref": "tag_schema.json#" } },
+    "embedding": { "type": "array", "items": { "type": "number" } },
+    "location": { "type": "string" },
+    "metadata": { "type": "object" }
+  },
+  "required": ["property_id"]
+}
