@@ -1,4 +1,6 @@
 import numpy as np
+EMBEDDING_SIZE = 1536  # adjust if your system uses a different size
+
 
 def construct_tag_vector(relevance: float, tag_embedding: list[float], polarity: str) -> np.ndarray:
     """
@@ -23,11 +25,25 @@ def normalize_vector(vector: np.ndarray) -> np.ndarray:
         return vector
     return vector / norm
 
-def compute_niche_embedding(tag_vectors: list[np.ndarray], neighborhood_vectors: list[np.ndarray]) -> np.ndarray:
+def compute_niche_embedding(tag_vectors: list[np.ndarray], neighborhood_vectors: list[np.ndarray]):
     """
-    niche_embedding = normalize(sum(all_tag_vectors) + sum(neighborhood_vectors))
+    Compute the niche embedding as the normalized sum of tag vectors
+    and neighborhood vectors. If both are empty, return a zero vector.
     """
-    total_sum = sum(tag_vectors) + sum(neighborhood_vectors)
+
+    # If no vectors exist, return a zero vector
+    if not tag_vectors and not neighborhood_vectors:
+        return np.zeros(EMBEDDING_SIZE)
+
+    # Sum tag vectors (if any)
+    tag_sum = sum(tag_vectors) if tag_vectors else np.zeros(EMBEDDING_SIZE)
+
+    # Sum neighborhood vectors (if any)
+    neighborhood_sum = sum(neighborhood_vectors) if neighborhood_vectors else np.zeros(EMBEDDING_SIZE)
+
+    total_sum = tag_sum + neighborhood_sum
+
+    # Normalize the final vector
     return normalize_vector(total_sum)
 
 def compute_property_embedding(tag_vectors: list[np.ndarray]) -> np.ndarray:
