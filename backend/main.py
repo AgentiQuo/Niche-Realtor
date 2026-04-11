@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from routes import niche, property, neighborhood, client, match
+from routes import niche, property, neighborhood, client, match, intelligence_routes
 
 app = FastAPI(title="Niche Realtor API", version="1.0.0")
 
@@ -14,6 +14,7 @@ app.add_middleware(
 )
 
 app.include_router(niche.router, prefix="/niche", tags=["Niche"])
+app.include_router(intelligence_routes.router, prefix="/niche", tags=["Niche Intelligence"])
 app.include_router(property.router, prefix="/property", tags=["Property"])
 app.include_router(neighborhood.router, prefix="/neighborhood", tags=["Neighborhood"])
 app.include_router(client.router, prefix="/client", tags=["Client"])
