@@ -1,11 +1,14 @@
 from typing import Optional, List
-from pydantic import BaseModel, conlist
+from pydantic import BaseModel
 
 class Tag(BaseModel):
-    tag_id: str
     name: str
-    polarity: str # positive, neutral, negative
-    relevance: float
-    confidence: float
-    embedding: List[float]
-    source: str # image, text, neighborhood
+
+class TagInternal(Tag):
+    tag_id: str
+    niche_id: Optional[str] = None
+    polarity: str = "positive"
+    relevance: float = 1.0
+    confidence: float = 1.0
+    embedding: List[float] = []
+    source: str = "text"
