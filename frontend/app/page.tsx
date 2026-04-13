@@ -67,7 +67,7 @@ export default function SearchPage() {
         <main>
           {isLoading ? (
             <div className="grid gap-6 sm:grid-cols-2">
-              {[..Array(4)].map((_, i) => (
+              {[...Array(4)].map((_, i) => (
                 <div key={i} className="h-48 animate-pulse rounded-2xl bg-zinc-200 dark:bg-zinc-800" />
               ))}
             </div>
