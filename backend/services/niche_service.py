@@ -1,21 +1,24 @@
 import uuid
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from db.relational_db import relational_db_instance
 from db.vector_db import vector_db_instance
 from embeddings.embedding_math import construct_tag_vector, compute_niche_embedding, EMBEDDING_SIZE
 from models.niche import Niche
 from models.tag import Tag, TagInternal
 import numpy as np
+from services.embedding_service import embedding_service_instance
 
 class NicheService:
     def create_niche(self, name: str, description: str, sources: List[str], tags: List[Tag]) -> str:
         niche_id = str(uuid.uuid4())
         
-        # 1. Compute embedding and build internal tags
         internal_tags = []
         tag_vectors = []
         for t in tags:
             tag_id = str(uuid.uuid4())
+            # GET REAL EMBEDDING
+            t_embedding = embedding_service_instance.get_embedding(t.name)
+            
             internal_tag = TagInternal(
                 tag_id=tag_id,
                 niche_id=niche_id,
@@ -23,7 +26,7 @@ class NicheService:
                 polarity="positive",
                 relevance=1.0,
                 confidence=1.0,
-                embedding=[0.0] * EMBEDDING_SIZE,
+                embedding=t_embedding,
                 source="text"
             )
             internal_tags.append(internal_tag)
@@ -31,17 +34,11 @@ class NicheService:
             vec = construct_tag_vector(internal_tag.relevance, internal_tag.embedding, internal_tag.polarity)
             tag_vectors.append(vec)
             
-            # Persist tag independently in 'tags' collection
+            # Persist tag
             relational_db_instance.insert_or_update("tags", tag_id, internal_tag.model_dump())
             
-        # The spec also sums neighborhood_vectors, but at creation we might not have any yet.
-        # We'll just sum the tag_vectors for now.
-        neighborhood_vectors: List[np.ndarray] = []
+        final_embedding = compute_niche_embedding(tag_vectors, []).tolist()
         
-        # Using the math from embeddings/embedding_math.py
-        final_embedding = compute_niche_embedding(tag_vectors, neighborhood_vectors).tolist()
-        
-        # 2. Construct Niche storage dict
         niche_dict = {
             "niche_id": niche_id,
             "name": name,
@@ -52,45 +49,93 @@ class NicheService:
             "sources": sources
         }
         
-        # 3. Store in DB
         relational_db_instance.insert_or_update("niches", niche_id, niche_dict)
-        vector_db_instance.insert("niches", niche_id, final_embedding, metadata={"name": name})
+        vector_db_instance.insert("niches", niche_id, final_embedding, metadata={"name": name, "description": description})
         
         return niche_id
 
-    def list_niches(self, page: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
+    def update_niche(self, niche_id: str, name: str, description: str, tags: List[Tag]) -> None:
+        niche_data = relational_db_instance.get_by_id("niches", niche_id)
+        if not niche_data:
+            raise ValueError(f"Niche {niche_id} not found")
+        
+        # 1. Re-compute tags and embeddings
+        internal_tags = []
+        tag_vectors = []
+        for t in tags:
+            tag_id = str(uuid.uuid4())
+            t_embedding = embedding_service_instance.get_embedding(t.name)
+            
+            internal_tag = TagInternal(
+                tag_id=tag_id,
+                niche_id=niche_id,
+                name=t.name,
+                polarity="positive",
+                relevance=1.0,
+                confidence=1.0,
+                embedding=t_embedding,
+                source="text"
+            )
+            internal_tags.append(internal_tag)
+            tag_vectors.append(construct_tag_vector(1.0, t_embedding, "positive"))
+            relational_db_instance.insert_or_update("tags", tag_id, internal_tag.model_dump())
+            
+        # 2. Maintain existing neighborhoods if any
+        neighborhood_vectors = []
+        for n_dict in niche_data.get("neighborhoods", []):
+            if "embedding" in n_dict and n_dict["embedding"]:
+                neighborhood_vectors.append(np.array(n_dict["embedding"]))
+        
+        final_embedding = compute_niche_embedding(tag_vectors, neighborhood_vectors).tolist()
+        
+        # 3. Update storage
+        niche_data["name"] = name
+        niche_data["description"] = description
+        niche_data["tags"] = [it.model_dump() for it in internal_tags]
+        niche_data["embedding"] = final_embedding
+        
+        relational_db_instance.insert_or_update("niches", niche_id, niche_data)
+        vector_db_instance.insert("niches", niche_id, final_embedding, metadata={"name": name, "description": description})
 
-        # In a real impl, we'd use skip=(page-1)*limit, limit=limit
-        niches = relational_db_instance.list_all("niches")
-        return niches
+    def list_niches(self, page: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
+        return relational_db_instance.list_all("niches")
 
     def recompute_niche_embedding(self, niche_id: str) -> List[float]:
-
         niche_data = relational_db_instance.get_by_id("niches", niche_id)
         if not niche_data:
             return []
         
         tag_vectors = []
+        updated_tags = []
         for t_dict in niche_data.get("tags", []):
-            # Promote dict to internal model to use construct_tag_vector
+            # Refresh embedding
+            new_emb = embedding_service_instance.get_embedding(t_dict["name"])
+            t_dict["embedding"] = new_emb
+            updated_tags.append(t_dict)
+            
             it = TagInternal(**t_dict)
             vec = construct_tag_vector(it.relevance, it.embedding, it.polarity)
             tag_vectors.append(vec)
             
         neighborhood_vectors = []
         for n_dict in niche_data.get("neighborhoods", []):
-            # Assuming neighborhoods also have embeddings
             if "embedding" in n_dict and n_dict["embedding"]:
                 neighborhood_vectors.append(np.array(n_dict["embedding"]))
         
-        final_embedding = compute_niche_embedding(tag_vectors, neighborhood_vectors).tolist()
+        if not tag_vectors and not neighborhood_vectors:
+            # Fallback to name/desc
+            text = niche_data["name"] + " " + niche_data["description"]
+            final_embedding = np.array(embedding_service_instance.get_embedding(text))
+        else:
+            final_embedding = compute_niche_embedding(tag_vectors, neighborhood_vectors)
         
-        # Update niche data
-        niche_data["embedding"] = final_embedding
+        niche_data["tags"] = updated_tags
+        niche_data["embedding"] = final_embedding.tolist()
+        
         relational_db_instance.insert_or_update("niches", niche_id, niche_data)
-        vector_db_instance.insert("niches", niche_id, final_embedding, metadata={"name": niche_data.get("name")})
+        vector_db_instance.insert("niches", niche_id, niche_data["embedding"], metadata={"name": niche_data["name"], "description": niche_data["description"]})
         
-        return final_embedding
+        return niche_data["embedding"]
 
     def recompute_all(self) -> Dict[str, int]:
         niches = relational_db_instance.list_all("niches")
@@ -101,4 +146,3 @@ class NicheService:
         return {"recomputed_count": count}
 
 niche_service_instance = NicheService()
-
