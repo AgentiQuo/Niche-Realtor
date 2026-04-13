@@ -59,8 +59,46 @@ class NicheService:
         return niche_id
 
     def list_niches(self, page: int = 1, limit: int = 50) -> List[Dict[str, Any]]:
+
         # In a real impl, we'd use skip=(page-1)*limit, limit=limit
         niches = relational_db_instance.list_all("niches")
         return niches
 
+    def recompute_niche_embedding(self, niche_id: str) -> List[float]:
+
+        niche_data = relational_db_instance.get_by_id("niches", niche_id)
+        if not niche_data:
+            return []
+        
+        tag_vectors = []
+        for t_dict in niche_data.get("tags", []):
+            # Promote dict to internal model to use construct_tag_vector
+            it = TagInternal(**t_dict)
+            vec = construct_tag_vector(it.relevance, it.embedding, it.polarity)
+            tag_vectors.append(vec)
+            
+        neighborhood_vectors = []
+        for n_dict in niche_data.get("neighborhoods", []):
+            # Assuming neighborhoods also have embeddings
+            if "embedding" in n_dict and n_dict["embedding"]:
+                neighborhood_vectors.append(np.array(n_dict["embedding"]))
+        
+        final_embedding = compute_niche_embedding(tag_vectors, neighborhood_vectors).tolist()
+        
+        # Update niche data
+        niche_data["embedding"] = final_embedding
+        relational_db_instance.insert_or_update("niches", niche_id, niche_data)
+        vector_db_instance.insert("niches", niche_id, final_embedding, metadata={"name": niche_data.get("name")})
+        
+        return final_embedding
+
+    def recompute_all(self) -> Dict[str, int]:
+        niches = relational_db_instance.list_all("niches")
+        count = 0
+        for niche in niches:
+            self.recompute_niche_embedding(niche["niche_id"])
+            count += 1
+        return {"recomputed_count": count}
+
 niche_service_instance = NicheService()
+

@@ -30,3 +30,9 @@ def match_niches(request: MatchRequest):
         profile=request.profile, 
         limit=request.limit
     )
+    
+@router.post("/recompute-all")
+def recompute_all_embeddings():
+    from services.niche_service import niche_service_instance
+    return niche_service_instance.recompute_all()
+
