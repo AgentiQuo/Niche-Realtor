@@ -1,8 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from routes import niche, property, neighborhood, client, match, intelligence_routes
+from config.settings import settings
 
-app = FastAPI(title="Niche Realtor API", version="1.0.0")
+app = FastAPI(title=settings.PROJECT_NAME, version=settings.VERSION)
+
+
 
 # Setup CORS
 app.add_middleware(
