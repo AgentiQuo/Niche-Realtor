@@ -1,48 +1,72 @@
-from typing import Dict, Any, Tuple
+from typing import Dict, Any, Tuple, List
 import uuid
 import numpy as np
+import json
 
 from embeddings.embedding_math import construct_tag_vector, compute_neighborhood_embedding
 from models.tag import Tag
+from services.llm_service import llm_service_instance
+from utils.agent_config import get_agent_config
 
 class NeighborhoodScoutAgent:
     """
     Agent 3 — Neighborhood Scout Agent
     Purpose: Build qualitative profiles of neighborhoods.
-    Sources: Google Maps, Street View, Reddit, TripAdvisor, blogs
-    Output: neighborhood tags + neighborhood embedding
     """
-    def scout(self, neighborhood_name: str, region: str) -> Tuple[list[Tag], list[float], str]:
-        # Mocking an internet scouting operation.
+    def __init__(self):
+        self.config = get_agent_config("neighborhood_scout")
+
+    def scout(self, neighborhood_name: str, region: str) -> Tuple[List[Tag], List[float], str]:
+        """
+        Uses an LLM to scout and summarize the vibe of a neighborhood.
+        """
+        system_prompt = """
+        You are a Local Neighborhood Scout.
+        Analyze the specified neighborhood and provide:
+        1. A set of qualitative tags with polarity, relevance, and confidence.
+        2. A concise "vibe summary" (max 2 sentences).
+        Return ONLY valid JSON.
+        """
         
-        # Base static embedding for "Walkable"
-        embed1 = [0.3, 0.4] * 64 
-        # Base static embedding for "Noisy"
-        embed2 = [0.1, 0.1] * 64
+        prompt = f"Scout the neighborhood '{neighborhood_name}' in '{region}'."
         
-        tag1 = Tag(
-            tag_id=str(uuid.uuid4()),
-            name="Walkable",
-            polarity="positive",
-            relevance=9.5,
-            confidence=0.85,
-            embedding=embed1,
-            source="neighborhood"
+        response = llm_service_instance.generate_completion(
+            prompt=prompt,
+            system_prompt=system_prompt,
+            model=self.config.get("model"),
+            temperature=self.config.get("temperature", 0.3)
         )
         
-        tag2 = Tag(
-            tag_id=str(uuid.uuid4()),
-            name="Noisy",
-            polarity="negative",
-            relevance=7.0,
-            confidence=0.8,
-            embedding=embed2, # Polarity math will invert this
-            source="neighborhood"
-        )
-        
-        tags = [tag1, tag2]
-        vibe_summary = f"{neighborhood_name} is a highly walkable area with great access to transit, but can get loud on weekends."
-        
+        try:
+            data = json.loads(response)
+            raw_tags = data.get("tags", [])
+            vibe_summary = data.get("vibe_summary", f"A summary of {neighborhood_name}")
+            
+            tags = []
+            for rt in raw_tags:
+                mock_embed = [0.1 * len(rt.get("name", ""))] * 128
+                tags.append(Tag(
+                    tag_id=str(uuid.uuid4()),
+                    name=rt.get("name", "Unknown"),
+                    polarity=rt.get("polarity", "positive"),
+                    relevance=float(rt.get("relevance", 5.0)),
+                    confidence=float(rt.get("confidence", 0.5)),
+                    embedding=mock_embed,
+                    source="neighborhood_scout"
+                ))
+        except Exception:
+            # Fallback
+            tags = [Tag(
+                tag_id=str(uuid.uuid4()),
+                name="Vibrant",
+                polarity="positive",
+                relevance=8.0,
+                confidence=0.8,
+                embedding=[0.1] * 128,
+                source="fallback"
+            )]
+            vibe_summary = f"{neighborhood_name} has a vibrant atmosphere."
+
         # Extract and sum vectors according to BC-4 spec
         tag_vectors = []
         for t in tags:
