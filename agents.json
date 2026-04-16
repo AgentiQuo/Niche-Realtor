@@ -1,0 +1,32 @@
+[
+    {
+        "name": "default",
+        "model": "anthropic/claude-3.5-sonnet",
+        "temperature": 0.2
+    },
+    {
+        "name": "listing_scraper",
+        "model": "anthropic/claude-3-haiku",
+        "temperature": 0.1
+    },
+    {
+        "name": "property_analysis",
+        "model": "anthropic/claude-3.5-sonnet",
+        "temperature": 0.2
+    },
+    {
+        "name": "neighborhood_scout",
+        "model": "anthropic/claude-3-haiku",
+        "temperature": 0.3
+    },
+    {
+        "name": "client_modeling",
+        "model": "anthropic/claude-3.5-sonnet",
+        "temperature": 0.2
+    },
+    {
+        "name": "matching_engine",
+        "model": "anthropic/claude-3.5-sonnet",
+        "temperature": 0.1
+    }
+]
